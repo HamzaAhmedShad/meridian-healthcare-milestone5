@@ -1,0 +1,7 @@
+project_id        = "meridian-healthcare-cost"
+region            = "us-central1"
+zone              = "us-central1-a"
+cluster_name      = "healthcare-gke"
+sql_instance_name = "meridian-healthcare-db"
+gcs_bucket_name   = "meridian-healthcare-uploads-159331714929"
+alert_email       = "hamzaahmedshad@gmail.com"
