@@ -29,3 +29,8 @@ backend/app/ml/artifacts/metrics.json
 # Local temporary files
 *.log
 .DS_Store
+
+# Milestone 6: versioned inference artifacts
+!backend/app/ml/artifacts/model.joblib
+!backend/app/ml/artifacts/scaler.joblib
+!backend/app/ml/artifacts/metrics.json
