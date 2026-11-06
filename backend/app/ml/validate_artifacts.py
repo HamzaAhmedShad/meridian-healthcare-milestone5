@@ -6,7 +6,7 @@ import warnings
 from sklearn.exceptions import InconsistentVersionWarning
 
 EXPECTED_VERSIONS = {
-    "scikit-learn": "1.5.2",
+    "scikit-learn": "1.9.0",
     "joblib": "1.4.2",
     "numpy": "2.4.6",
     "scipy": "1.17.1",
