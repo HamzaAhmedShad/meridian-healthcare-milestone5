@@ -1,3 +1,5 @@
+import hmac
+import uuid
 import json
 import logging
 import os
@@ -29,6 +31,12 @@ class JSONFormatter(logging.Formatter):
         }
         # Attach httpRequest field so Cloud Logging auto-populates the
         # httpRequest structured field and the log-based metric can filter on it.
+        log["event"] = getattr(record, "event", "application")
+        log["version"] = os.getenv("APP_VERSION", "development")
+        if hasattr(record, "request_id"):
+            log["request_id"] = record.request_id
+        if hasattr(record, "request_path"):
+            log["path"] = record.request_path
         if hasattr(record, "http_request"):
             log["httpRequest"] = record.http_request
         if record.exc_info:
@@ -86,33 +94,41 @@ app.add_middleware(
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """
-    Log every HTTP request as a structured JSON record.
-    Cloud Logging will pick up the `httpRequest` field automatically.
-    Errors (status >= 500) are logged at ERROR severity so the
-    log-based metric can filter on severity="ERROR".
-    """
-    start = time.perf_counter()
-    response = await call_next(request)
-    latency_ms = (time.perf_counter() - start) * 1000
+    started = time.perf_counter()
+    request_id = uuid.uuid4().hex
 
-    http_request = {
-        "requestMethod": request.method,
-        "requestUrl": str(request.url),
-        "requestPath": request.url.path,
-        "status": response.status_code,
-        "latencyMs": round(latency_ms, 2),
-        "userAgent": request.headers.get("user-agent", ""),
-        "remoteIp": request.client.host if request.client else "",
-    }
+    try:
+        response = await call_next(request)
+    except Exception:
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
-    level = logging.ERROR if response.status_code >= 500 else logging.INFO
+    elapsed = time.perf_counter() - started
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", "<unmatched>")
+    status = response.status_code
+
     logger.log(
-        level,
-        f"{request.method} {request.url.path} → {response.status_code} ({latency_ms:.1f}ms)",
-        extra={"http_request": http_request},
+        logging.ERROR if status >= 500 else
+        logging.WARNING if status >= 400 else logging.INFO,
+        f"{request.method} {route_path} -> {status}",
+        extra={
+            "event": "http_request",
+            "request_id": request_id,
+            "request_path": route_path,
+            "http_request": {
+                "requestMethod": request.method,
+                "status": status,
+                "latency": f"{elapsed:.6f}s",
+            },
+        },
     )
+
+    response.headers["X-Request-ID"] = request_id
     return response
+
 
 # ============================================================
 # ROUTERS
@@ -147,6 +163,7 @@ def liveness():
     return {"status": "alive"}
 
 
+@app.get("/api/health/ready", include_in_schema=False)
 @app.get("/health/ready")
 def readiness():
     try:
@@ -174,21 +191,27 @@ def root():
 # TEST ERROR ENDPOINT (used in Milestone 6 demo to trigger 5xx)
 # ============================================================
 
-@app.get("/api/test-error")
-def trigger_error():
-    """
-    Intentionally raises HTTP 500.
-    Use this during the M6 demo to show a JSON log entry and the
-    corresponding spike in the log-based metric.
-    """
-    logger.error(
-        "Intentional 500 error triggered for demo",
-        extra={
-            "http_request": {
-                "requestMethod": "GET",
-                "requestPath": "/api/test-error",
-                "status": 500,
-            }
-        },
+@app.get("/api/test-error", include_in_schema=False)
+def trigger_error(request: Request):
+    expected = os.getenv("DEMO_ERROR_TOKEN", "")
+    supplied = request.headers.get("X-Demo-Token", "")
+
+    if not expected or not supplied or not hmac.compare_digest(
+        supplied.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Request middleware writes the single counted error log.
+    raise HTTPException(
+        status_code=500,
+        detail="Controlled Milestone 6 demonstration error",
     )
-    raise HTTPException(status_code=500, detail="Intentional 5xx error for Milestone 6 demo")
+
+
+
+@app.get("/api/version")
+def release_version():
+    return {
+        "service": "healthcare-api",
+        "commit": os.getenv("APP_VERSION", "development"),
+    }

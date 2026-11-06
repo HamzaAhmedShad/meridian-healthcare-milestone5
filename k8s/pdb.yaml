@@ -2,8 +2,10 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: healthcare-api-pdb
+  namespace: default
 spec:
-  minAvailable: 2
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
   selector:
     matchLabels:
       app: healthcare-api

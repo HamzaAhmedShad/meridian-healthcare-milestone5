@@ -1,185 +1,99 @@
-name: Build, Deploy & Health Check
+name: Build, Deploy & Verified Rollback
 
 on:
   push:
-    branches:
-      - main          # production deployments
-      - test-rollback # used to demo the rollback failure path
+    branches: [main, test-rollback]
+
+permissions:
+  contents: read
+
+# Both branches affect the same Deployment; never cancel a restoration in progress.
+concurrency:
+  group: meridian-healthcare-production
+  cancel-in-progress: false
 
 env:
-  PROJECT_ID:   meridian-healthcare-cost
-  REGION:       us-central1
-  ZONE:         us-central1-a
-  REGISTRY:     us-central1-docker.pkg.dev
-  REPO:         my-docker-repo
-  IMAGE:        healthcare-api
-  DEPLOYMENT:   healthcare-api
-  CONTAINER:    healthcare-api
-  NAMESPACE:    default
-  HEALTH_URL:   https://136-82-140-56.sslip.io/api/health
+  PROJECT_ID: meridian-healthcare-cost
+  REGISTRY: us-central1-docker.pkg.dev
+  REPO: my-docker-repo
+  IMAGE: healthcare-api
+  ZONE: us-central1-a
+  DEPLOYMENT: healthcare-api
+  CONTAINER: healthcare-api
+  NAMESPACE: default
+  BASE_URL: https://34-149-84-32.sslip.io
 
 jobs:
-  # ──────────────────────────────────────────────────────────
-  # JOB 1 — Build and push Docker image
-  # ──────────────────────────────────────────────────────────
   build:
     name: Build & Push Image
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     outputs:
-      image_tag: ${{ steps.meta.outputs.tag }}
-
+      image_digest: ${{ steps.publish.outputs.image_digest }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - name: Checkout source
+        uses: actions/checkout@v5
+      - name: Check syntax and release logic
+        run: |
+          python3 -c "import ast; from pathlib import Path; [ast.parse(p.read_text()) for p in Path('backend/app').rglob('*.py')]"
+          python3 -m unittest discover -s tests/milestone6 -v
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
-
-      - name: Generate image tag (short SHA)
-        id: meta
-        run: echo "tag=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }}" >> $GITHUB_OUTPUT
-
-      # ── Rollback demo: push deliberately broken image ──────────────────
-      # When on the test-rollback branch, override the tag to a non-existent
-      # image so the deploy step fails and rollback triggers.
-      - name: Override tag for rollback demo
-        if: github.ref == 'refs/heads/test-rollback'
-        run: echo "Using non-existent image to simulate a failed deployment"
-
-      - name: Build Docker image
-        if: github.ref != 'refs/heads/test-rollback'
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Configure registry authentication
+        run: gcloud auth configure-docker "$REGISTRY" --quiet
+      - name: Build and publish immutable release
+        id: publish
+        shell: bash
         run: |
-          docker build \
-            -t ${{ steps.meta.outputs.tag }} \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:latest \
-            ./backend
+          set -euo pipefail
+          IMAGE_TAG="$REGISTRY/$PROJECT_ID/$REPO/$IMAGE:$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker build --build-arg "APP_VERSION=$GITHUB_SHA" -t "$IMAGE_TAG" ./backend
+          docker push "$IMAGE_TAG"
+          IMAGE_DIGEST=$(docker image inspect --format='{{index .RepoDigests 0}}' "$IMAGE_TAG")
+          [[ "$IMAGE_DIGEST" == "$REGISTRY/$PROJECT_ID/$REPO/$IMAGE@sha256:"* ]]
+          echo "image_digest=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Published image: $IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Push Docker image
-        if: github.ref != 'refs/heads/test-rollback'
-        run: |
-          docker push ${{ steps.meta.outputs.tag }}
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:latest
-
-  # ──────────────────────────────────────────────────────────
-  # JOB 2 — Deploy to GKE and verify
-  # ──────────────────────────────────────────────────────────
   deploy:
-    name: Deploy to GKE
-    runs-on: ubuntu-latest
+    name: Deploy, Check Health & Recover
     needs: build
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - name: Checkout source
+        uses: actions/checkout@v5
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+      - name: Set up deployment tools
+        uses: google-github-actions/setup-gcloud@v3
         with:
-          cluster_name: ${{ secrets.GKE_CLUSTER }}
-          location:     ${{ env.ZONE }}
-          project_id:   ${{ env.PROJECT_ID }}
-
-      # ── Choose the image to deploy ─────────────────────────────────────
-      # Normal branch → use the freshly built SHA-tagged image
-      # test-rollback  → use a deliberately broken/non-existent tag
-      - name: Set deploy image
-        id: image
+          project_id: ${{ env.PROJECT_ID }}
+          install_components: kubectl,gke-gcloud-auth-plugin
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: healthcare-gke
+          location: ${{ env.ZONE }}
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Deploy with explicit recovery and verification
+        env:
+          CANDIDATE_IMAGE: ${{ needs.build.outputs.image_digest }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          ROLLBACK_DEMO: ${{ github.ref == 'refs/heads/test-rollback' && 'true' || 'false' }}
+          # Bootstrap only: change to false after the first successful versioned release.
+          ALLOW_LEGACY_BASELINE: 'true'
+        shell: bash
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/test-rollback" ]; then
-            echo "target=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:does-not-exist" >> $GITHUB_OUTPUT
-          else
-            echo "target=${{ needs.build.outputs.image_tag }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          if [[ "$ROLLBACK_DEMO" == "true" ]]; then
+            export CANDIDATE_IMAGE="$REGISTRY/$PROJECT_ID/$REPO/$IMAGE:missing-demo-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           fi
-
-      # ── Rolling update ─────────────────────────────────────────────────
-      - name: Deploy new image
-        run: |
-          kubectl set image deployment/${{ env.DEPLOYMENT }} \
-            ${{ env.CONTAINER }}=${{ steps.image.outputs.target }} \
-            --namespace=${{ env.NAMESPACE }}
-
-      # ── Wait for rollout (3-minute timeout) ────────────────────────────
-      - name: Wait for rollout to complete
-        id: rollout
-        run: |
-          kubectl rollout status deployment/${{ env.DEPLOYMENT }} \
-            --namespace=${{ env.NAMESPACE }} \
-            --timeout=180s
-        continue-on-error: true   # don't fail immediately — let health check decide
-
-      # ── Application health check ───────────────────────────────────────
-      - name: Health check
-        id: healthcheck
-        if: steps.rollout.outcome == 'success'
-        run: |
-          echo "Waiting 15s for load balancer to update..."
-          sleep 15
-          for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 ${{ env.HEALTH_URL }})
-            echo "Attempt $i — HTTP $STATUS"
-            if [ "$STATUS" = "200" ]; then
-              echo "Health check passed ✅"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Health check failed ❌"
-          exit 1
-        continue-on-error: true
-
-      # ── AUTOMATIC ROLLBACK ─────────────────────────────────────────────
-      # Triggers when EITHER the rollout timed out OR the health check failed.
-      - name: Rollback failed deployment
-        if: steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure'
-        run: |
-          echo "⚠️  Deployment failed — initiating rollback..."
-          kubectl rollout undo deployment/${{ env.DEPLOYMENT }} \
-            --namespace=${{ env.NAMESPACE }}
-          echo "Waiting for rollback to complete..."
-          kubectl rollout status deployment/${{ env.DEPLOYMENT }} \
-            --namespace=${{ env.NAMESPACE }} \
-            --timeout=120s
-
-      - name: Verify rollback is healthy
-        if: steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure'
-        run: |
-          echo "Waiting 15s after rollback..."
-          sleep 15
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 ${{ env.HEALTH_URL }})
-          echo "Post-rollback health check — HTTP $STATUS"
-          if [ "$STATUS" = "200" ]; then
-            echo "Previous version is serving traffic ✅"
-          else
-            echo "WARNING: Post-rollback health check also failed — manual intervention needed!"
-          fi
-
-      - name: Show pod status after rollback
-        if: steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure'
-        run: kubectl get pods --namespace=${{ env.NAMESPACE }} -l app=${{ env.DEPLOYMENT }}
-
-      # ── Fail the pipeline so GitHub marks the run red ─────────────────
-      - name: Fail pipeline if deployment was rolled back
-        if: steps.rollout.outcome == 'failure' || steps.healthcheck.outcome == 'failure'
-        run: |
-          echo "Pipeline failed: deployment was automatically rolled back."
-          exit 1
-
-      # ── Success output ─────────────────────────────────────────────────
-      - name: Deployment succeeded
-        if: steps.healthcheck.outcome == 'success'
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Image: ${{ steps.image.outputs.target }}"
-          echo "Live at: ${{ env.HEALTH_URL }}"
-          kubectl get pods --namespace=${{ env.NAMESPACE }} -l app=${{ env.DEPLOYMENT }}
+          python3 scripts/deploy_release.py

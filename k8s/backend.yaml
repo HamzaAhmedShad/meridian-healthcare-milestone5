@@ -13,6 +13,8 @@ spec:
         app: healthcare-api
     spec:
       serviceAccountName: healthcare-api-sa
+      nodeSelector:
+        iam.gke.io/gke-metadata-server-enabled: "true"
       containers:
         - name: healthcare-api
           image: us-central1-docker.pkg.dev/meridian-healthcare-cost/my-docker-repo/healthcare-api:v4

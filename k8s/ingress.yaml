@@ -5,11 +5,11 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: "gce"
     kubernetes.io/ingress.global-static-ip-name: "healthcare-gke-ip"
-    networking.gke.io/managed-certificates: "healthcare-ssl-cert"
+    networking.gke.io/managed-certificates: "healthcare-ssl-cert,healthcare-ssl-cert-m6"
     networking.gke.io/v1beta1.FrontendConfig: "healthcare-frontend-config"
 spec:
   rules:
-    - host: 136-82-140-56.sslip.io
+    - host: 34-149-84-32.sslip.io
       http:
         paths:
           - path: /
