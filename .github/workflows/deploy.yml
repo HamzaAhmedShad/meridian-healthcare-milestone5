@@ -89,7 +89,7 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
           ROLLBACK_DEMO: ${{ github.ref == 'refs/heads/test-rollback' && 'true' || 'false' }}
           # Bootstrap only: change to false after the first successful versioned release.
-          ALLOW_LEGACY_BASELINE: 'true'
+          ALLOW_LEGACY_BASELINE: 'false'
         shell: bash
         run: |
           set -euo pipefail
