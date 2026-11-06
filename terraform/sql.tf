@@ -8,7 +8,7 @@
 resource "google_sql_database_instance" "main" {
   name             = var.sql_instance_name
   database_version = "POSTGRES_18"
-  region           = "us-central1"   # instance is in us-central1-f
+  region           = "us-central1" # instance is in us-central1-f
   project          = var.project_id
 
   settings {

@@ -34,3 +34,13 @@ backend/app/ml/artifacts/metrics.json
 !backend/app/ml/artifacts/model.joblib
 !backend/app/ml/artifacts/scaler.joblib
 !backend/app/ml/artifacts/metrics.json
+
+# Local Terraform state, configuration values, and saved plans
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log

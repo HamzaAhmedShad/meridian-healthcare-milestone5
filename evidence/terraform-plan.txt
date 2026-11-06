@@ -1,0 +1,19 @@
+google_service_account.ci_deployer: Refreshing state... [id=projects/meridian-healthcare-cost/serviceAccounts/ci-deployer@meridian-healthcare-cost.iam.gserviceaccount.com]
+google_monitoring_notification_channel.team_email: Refreshing state... [id=projects/meridian-healthcare-cost/notificationChannels/15885468625606153838]
+google_logging_metric.http_5xx_errors: Refreshing state... [id=http_5xx_errors]
+google_storage_bucket.uploads: Refreshing state... [id=meridian-healthcare-uploads-159331714929]
+google_secret_manager_secret.db_password: Refreshing state... [id=projects/meridian-healthcare-cost/secrets/healthcare-db-password]
+google_sql_database_instance.main: Refreshing state... [id=meridian-healthcare-db]
+google_container_cluster.main: Refreshing state... [id=projects/meridian-healthcare-cost/locations/us-central1-a/clusters/healthcare-gke]
+google_monitoring_dashboard.main: Refreshing state... [id=projects/159331714929/dashboards/b820592b-c200-474a-af80-2f31cba16039]
+google_monitoring_alert_policy.http_5xx_spike: Refreshing state... [id=projects/meridian-healthcare-cost/alertPolicies/18248360175029255893]
+google_storage_bucket_iam_member.uploads_writer: Refreshing state... [id=b/meridian-healthcare-uploads-159331714929/roles/storage.objectCreator/principal://iam.googleapis.com/projects/159331714929/locations/global/workloadIdentityPools/meridian-healthcare-cost.svc.id.goog/subject/ns/default/sa/healthcare-api-sa]
+google_secret_manager_secret_iam_member.secret_accessor: Refreshing state... [id=projects/meridian-healthcare-cost/secrets/healthcare-db-password/roles/secretmanager.secretAccessor/principal://iam.googleapis.com/projects/159331714929/locations/global/workloadIdentityPools/meridian-healthcare-cost.svc.id.goog/subject/ns/default/sa/healthcare-api-sa]
+google_sql_user.app: Refreshing state... [id=healthcare_app//meridian-healthcare-db]
+google_sql_database.main: Refreshing state... [id=projects/meridian-healthcare-cost/instances/meridian-healthcare-db/databases/healthcare_cost]
+google_container_node_pool.main: Refreshing state... [id=projects/meridian-healthcare-cost/locations/us-central1-a/clusters/healthcare-gke/nodePools/default-pool]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.

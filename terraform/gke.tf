@@ -7,12 +7,11 @@
 
 resource "google_container_cluster" "main" {
   name     = var.cluster_name
-  location = var.zone      # us-central1-a — this is a ZONAL cluster
+  location = var.zone # us-central1-a — this is a ZONAL cluster
   project  = var.project_id
 
   # We manage the node pool separately; remove the default one.
-  remove_default_node_pool = true
-  initial_node_count       = 1
+  initial_node_count = 1
 
   # Enables Workload Identity — required for GCS/Secret Manager access
   workload_identity_config {
@@ -48,7 +47,7 @@ resource "google_container_cluster" "main" {
 resource "google_container_node_pool" "main" {
   name       = "default-pool"
   cluster    = google_container_cluster.main.name
-  location   = var.zone      # must match cluster location (zonal)
+  location   = var.zone # must match cluster location (zonal)
   project    = var.project_id
   node_count = 2
 

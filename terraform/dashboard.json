@@ -1,0 +1,113 @@
+{
+  "displayName": "Meridian Healthcare - Application Dashboard",
+  "mosaicLayout": {
+    "columns": 48,
+    "tiles": [
+      {
+        "height": 16,
+        "widget": {
+          "title": "HTTP 5xx errors per minute",
+          "xyChart": {
+            "chartOptions": {
+              "mode": "COLOR"
+            },
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "perSeriesAligner": "ALIGN_SUM"
+                    },
+                    "filter": "metric.type=\"logging.googleapis.com/user/http_5xx_errors\" resource.type=\"k8s_container\" resource.label.\"project_id\"=\"meridian-healthcare-cost\" resource.label.\"cluster_name\"=\"healthcare-gke\" resource.label.\"namespace_name\"=\"default\" resource.label.\"container_name\"=\"healthcare-api\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Errors / minute",
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24
+      },
+      {
+        "height": 16,
+        "widget": {
+          "title": "API CPU usage by pod",
+          "xyChart": {
+            "chartOptions": {
+              "mode": "COLOR"
+            },
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "resource.labels.pod_name"
+                      ],
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"kubernetes.io/container/cpu/core_usage_time\" resource.type=\"k8s_container\" resource.labels.project_id=\"meridian-healthcare-cost\" resource.labels.cluster_name=\"healthcare-gke\" resource.labels.namespace_name=\"default\" resource.labels.container_name=\"healthcare-api\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "CPU cores",
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24
+      },
+      {
+        "height": 16,
+        "widget": {
+          "title": "API memory usage by pod",
+          "xyChart": {
+            "chartOptions": {
+              "mode": "COLOR"
+            },
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "resource.labels.pod_name"
+                      ],
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    },
+                    "filter": "metric.type=\"kubernetes.io/container/memory/used_bytes\" resource.type=\"k8s_container\" resource.labels.project_id=\"meridian-healthcare-cost\" resource.labels.cluster_name=\"healthcare-gke\" resource.labels.namespace_name=\"default\" resource.labels.container_name=\"healthcare-api\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Bytes",
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 16
+      }
+    ]
+  }
+}

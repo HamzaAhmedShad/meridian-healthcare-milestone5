@@ -13,14 +13,6 @@ resource "google_storage_bucket" "uploads" {
 
   uniform_bucket_level_access = true
 
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type = "Delete"
-    }
-  }
 
   lifecycle {
     prevent_destroy = true

@@ -17,7 +17,13 @@ spec:
         iam.gke.io/gke-metadata-server-enabled: "true"
       containers:
         - name: healthcare-api
-          image: us-central1-docker.pkg.dev/meridian-healthcare-cost/my-docker-repo/healthcare-api:v4
+          image: us-central1-docker.pkg.dev/meridian-healthcare-cost/my-docker-repo/healthcare-api@sha256:c15de3db39eb732d0076feb91414a9f7fa1425adecec87067a51b88fef748b1f
+          env:
+            - name: DEMO_ERROR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: healthcare-demo-error
+                  key: token
           ports:
             - containerPort: 8000
           resources:
